@@ -1,4 +1,4 @@
-﻿// Decompiled with JetBrains decompiler
+// Decompiled with JetBrains decompiler
 // Type: zamboni.IceV4File
 // Assembly: zamboni, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
 // MVID: 73B487C9-8F41-4586-BEF5-F7D7BFBD4C55
@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Zamboni.Cryptography;
 
 namespace Zamboni.IceFileFormats
 {
@@ -52,7 +53,7 @@ namespace Zamboni.IceFileFormats
             int num2 = num1 == 1 ? 288 : 272;
             BlowfishKeys blowfishKeys = getBlowfishKeys(openReader.ReadBytes(256), compSize);
             byte[][] numArray1 = new byte[3][];
-            byte[] numArray2 = new byte[48];
+            // byte[] numArray2 = new byte[48];
             byte[] decryptedHeaderData;
             if (num1 == 1 || num1 == 9)
             {
@@ -116,7 +117,7 @@ namespace Zamboni.IceFileFormats
             BlowfishKeys blowfishKeys = new BlowfishKeys();
             uint temp_key =
                 (uint)((int)BitConverter.ToUInt32(new Crc32().ComputeHash(magicNumbers, 124, 96).Reverse().ToArray(),
-                    0) ^ (int)BitConverter.ToUInt32(magicNumbers, 108) ^ compSize ^ 1129510338);
+                    0) ^ (int)BitConverter.ToUInt32(magicNumbers, 108) ^ compSize ^ keyconstant_1);
             uint key = getKey(magicNumbers, temp_key);
             blowfishKeys.groupOneBlowfish[0] = calcBlowfishKeys(magicNumbers, key);
             blowfishKeys.groupOneBlowfish[1] = getKey(magicNumbers, blowfishKeys.groupOneBlowfish[0]);
@@ -144,14 +145,14 @@ namespace Zamboni.IceFileFormats
         private uint calcBlowfishKeys(byte[] keys, uint temp_key)
         {
             uint temp_key1 = 2382545500U ^ temp_key;
-            uint num1 = (uint)((613566757L * temp_key1) >> 32);
+            uint num1 = (uint)((keyconstant_3 * temp_key1) >> 32);
             uint num2 = ((((temp_key1 - num1) >> 1) + num1) >> 2) * 7U;
             for (int index = (int)temp_key1 - (int)num2 + 2; index > 0; --index)
             {
                 temp_key1 = getKey(keys, temp_key1);
             }
 
-            return (uint)((int)temp_key1 ^ 1129510338 ^ -850380898);
+            return (uint)((int)temp_key1 ^ keyconstant_1 ^ -850380898);
         }
 
         public byte[] getRawData(bool compress, bool forceUnencrypted, Oodle.CompressorLevel compressorLevel)
@@ -184,15 +185,15 @@ namespace Zamboni.IceFileFormats
             Array.Copy(BitConverter.GetBytes(groupOneIn.Length), 0, headerData, 0x140, 0x4);
             Array.Copy(BitConverter.GetBytes(groupTwoIn.Length), 0, headerData, 0x144, 0x4);
 
-            byte[] compressedContents1 = getCompressedContents(groupOneIn, compress, compressorLevel);
-            byte[] compressedContents2 = getCompressedContents(groupTwoIn, compress, compressorLevel);
+            Memory<byte> compressedContents1 = getCompressedContents(groupOneIn, compress, compressorLevel);
+            Memory<byte> compressedContents2 = getCompressedContents(groupTwoIn, compress, compressorLevel);
             int compSize = headerData.Length + compressedContents1.Length + compressedContents2.Length;
 
             //Set main CRC (Should be done after potential compression, but before encryption)
-            List<byte> crcCombo = new List<byte>(compressedContents1);
-            crcCombo.AddRange(compressedContents2);
-            uint mainCrc = new Crc32Alt().GetCrc32(crcCombo.ToArray());
-            crcCombo.Clear();
+            // List<byte> crcCombo = new List<byte>(compressedContents1);
+            // crcCombo.AddRange(compressedContents2);
+            uint mainCrc = new Crc32Alt().GetCrc32(new ReadOnlyMemory<byte>[] { compressedContents1, compressedContents2 });
+            // crcCombo.Clear();
             Array.Copy(BitConverter.GetBytes(mainCrc), 0, headerData, 0x14, 0x4);
 
             if (compress)

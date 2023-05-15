@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Zamboni.IceFileFormats
@@ -157,6 +158,7 @@ namespace Zamboni.IceFileFormats
             /// <returns></returns>
             public static byte[] GetBytes(groupStruct gp)
             {
+                /*
                 List<byte> outBytes = new List<byte>();
                 outBytes.AddRange(BitConverter.GetBytes(gp.originalSize));
                 outBytes.AddRange(BitConverter.GetBytes(gp.dataSize));
@@ -164,14 +166,27 @@ namespace Zamboni.IceFileFormats
                 outBytes.AddRange(BitConverter.GetBytes(gp.crc32));
 
                 return outBytes.ToArray();
+                */
+
+                var outBytes = new byte[sizeof(uint) * 4];
+                Span<byte> span = outBytes;
+                BitConverter.TryWriteBytes(span, gp.originalSize);
+                span = span.Slice(sizeof(uint));
+                BitConverter.TryWriteBytes(span, gp.dataSize);
+                span = span.Slice(sizeof(uint));
+                BitConverter.TryWriteBytes(span, gp.fileCount);
+                span = span.Slice(sizeof(uint));
+                BitConverter.TryWriteBytes(span, gp.crc32);
+
+                return outBytes;
             }
         }
 
-        /// <summary>
+        /// <remarks>
         ///     Ice Archive files all have these before extraction.
         ///     Their size can vary, but they're typically 0x50 or 0x60 bytes.
         ///     When repacking, the variation is not a huge consideration.
-        /// </summary>
+        /// </remarks>
         public class IceFileHeader
         {
             /// <summary>
@@ -237,6 +252,7 @@ namespace Zamboni.IceFileFormats
 
             public byte[] GetBytes()
             {
+                /*
                 List<byte> outBytes = new List<byte>();
                 outBytes.AddRange(extension);
                 outBytes.AddRange(BitConverter.GetBytes(fileSize));
@@ -250,8 +266,42 @@ namespace Zamboni.IceFileFormats
 
                 outBytes.AddRange(reserveBytes);
                 outBytes.AddRange(fileNameBytes);
+                */
 
-                return outBytes.ToArray();
+                /* We can use unsafe context and sizeof to get the size of variable "fileSize" in runtime.
+                 * But it's kinda overkill.
+                unsafe
+                {
+                    var sizeOfFileSize = sizeof(fileSize);
+                }
+                * Alternatively, since we already knew and declared fileSize to be uint, we can just "sizeof(uint)" and it's valid outside unsafe context.
+                */
+                var buffer = new byte[extension.Length + (sizeof(uint) * 7) + reserveBytes.Length + fileNameBytes.Length];
+                Span<byte> span = buffer;
+                extension.AsSpan().CopyTo(span);
+                span = span.Slice(extension.Length);
+
+                BitConverter.TryWriteBytes(span, fileSize);
+                span = span.Slice(sizeof(uint));
+                BitConverter.TryWriteBytes(span, dataSize);
+                span = span.Slice(sizeof(uint));
+                BitConverter.TryWriteBytes(span, headerSize);
+                span = span.Slice(sizeof(uint));
+
+                BitConverter.TryWriteBytes(span, filenameLength);
+                span = span.Slice(sizeof(uint));
+                BitConverter.TryWriteBytes(span, field_0x14);
+                span = span.Slice(sizeof(uint));
+                BitConverter.TryWriteBytes(span, reserve0);
+                span = span.Slice(sizeof(uint));
+                BitConverter.TryWriteBytes(span, reserve1);
+                span = span.Slice(sizeof(uint));
+
+                reserveBytes.AsSpan().CopyTo(span);
+                span = span.Slice(reserveBytes.Length);
+                fileNameBytes.AsSpan().CopyTo(span);
+
+                return buffer;
             }
         }
     }

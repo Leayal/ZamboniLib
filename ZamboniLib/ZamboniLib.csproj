@@ -11,6 +11,7 @@
     <Description>Library for working with PSO2 ICE files. Logic primarily by Agrajag/Agra the Jagged and uploaded with his permission, despite the Jetbrains headers (Source was lost at some point). Ooz-sys by PizzaCrust (Might be slightly adjusted for this, don't remember)
 
 For various reasons, the code isn't particularly lovely here, but usable.</Description>
+    <Nullable>enable</Nullable>
     <PackageId>ZamboniCore</PackageId>
     <PackageProjectUrl>https://github.com/Shadowth117/ZamboniLib</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -20,10 +21,11 @@ For various reasons, the code isn't particularly lovely here, but usable.</Descr
     <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
     <Deterministic>true</Deterministic>
     <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
-    <TargetFrameworks>net472;net48;net6.0</TargetFrameworks>
+    <TargetFramework>net6.0-windows</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Clean up code by ReSharper and StyleCop.</PackageReleaseNotes>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="oo2core_8_win64_.dll" />

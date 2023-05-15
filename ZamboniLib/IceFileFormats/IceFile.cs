@@ -1,4 +1,4 @@
-﻿// Decompiled with JetBrains decompiler
+// Decompiled with JetBrains decompiler
 // Type: zamboni.IceFile
 // Assembly: zamboni, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
 // MVID: 73B487C9-8F41-4586-BEF5-F7D7BFBD4C55
@@ -9,7 +9,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using Zamboni.Cryptography;
 using Zamboni.IceFileFormats;
+using Zamboni.Oodle;
 
 namespace Zamboni
 {
@@ -42,8 +44,12 @@ namespace Zamboni
         /// <exception cref="ZamboniException"></exception>
         public static IceFile LoadIceFile(Stream inStream)
         {
+            if (!inStream.CanSeek) throw new ArgumentException("The stream must be seekable.", nameof(inStream));
+            
             inStream.Seek(8L, SeekOrigin.Begin);
             int num = inStream.ReadByte();
+            if (num == -1) throw new ZamboniException("Invalid Ice file: Stream ended prematurely.");
+
             inStream.Seek(0L, SeekOrigin.Begin);
             IceFile iceFile;
             switch (num)
@@ -55,17 +61,9 @@ namespace Zamboni
                     iceFile = new IceV4File(inStream);
                     break;
                 case 5:
-                    iceFile = new IceV5File(inStream);
-                    break;
                 case 6:
-                    iceFile = new IceV5File(inStream);
-                    break;
                 case 7:
-                    iceFile = new IceV5File(inStream);
-                    break;
                 case 8:
-                    iceFile = new IceV5File(inStream);
-                    break;
                 case 9:
                     iceFile = new IceV5File(inStream);
                     break;
@@ -124,7 +122,7 @@ namespace Zamboni
             }
 
             int int32 = BitConverter.ToInt32(fileToWrite, 0x10);
-            return Encoding.ASCII.GetString(fileToWrite, 0x40, int32).TrimEnd(new char[1]);
+            return Encoding.ASCII.GetString(fileToWrite, 0x40, int32).TrimEnd(char.MinValue);
         }
 
         protected byte[][] splitGroup(byte[] groupToSplit, int fileCount)
@@ -265,7 +263,7 @@ namespace Zamboni
             return groupHeaderArray;
         }
 
-        protected byte[] extractGroup(
+        protected byte[]? extractGroup(
             GroupHeader header,
             BinaryReader openReader,
             bool encrypt,
@@ -292,19 +290,19 @@ namespace Zamboni
             return PrsCompDecomp.Decompress(input, bufferLength);
         }
 
-        protected byte[] decompressGroupNgs(byte[] inData, uint bufferLength)
+        protected byte[]? decompressGroupNgs(byte[] inData, uint bufferLength)
         {
-            return Oodle.Decompress(inData, bufferLength);
+            return Oodle.Oodle.Decompress(inData, bufferLength);
         }
 
-        protected byte[] compressGroupNgs(byte[] buffer,
-            Oodle.CompressorLevel compressorLevel = Oodle.CompressorLevel.Fast)
+        protected Memory<byte> compressGroupNgs(byte[] buffer,
+            CompressorLevel compressorLevel = CompressorLevel.Fast)
         {
-            return Oodle.OodleCompress(buffer, compressorLevel);
+            return Oodle.Oodle.OodleCompress(buffer, compressorLevel);
         }
 
-        protected byte[] getCompressedContents(byte[] buffer, bool compress,
-            Oodle.CompressorLevel compressorLevel = Oodle.CompressorLevel.Fast)
+        protected Memory<byte> getCompressedContents(byte[] buffer, bool compress,
+            CompressorLevel compressorLevel = CompressorLevel.Fast)
         {
             if ((uint)buffer.Length <= 0U || compress == false)
             {
