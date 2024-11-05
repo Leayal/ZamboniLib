@@ -41,6 +41,8 @@ namespace Zamboni.IceFileFormats
 
         private byte[][] splitGroups(Stream inFile)
         {
+            // I know it's reverse-engineered IL (via Jetbrain decompiler) but it's kinda questionable at some part.
+
             BinaryReader openReader = new BinaryReader(inFile);
             openReader.ReadBytes(4);
             openReader.ReadInt32();
@@ -50,20 +52,24 @@ namespace Zamboni.IceFileFormats
             openReader.ReadInt32();
             int num1 = openReader.ReadInt32();
             int compSize = openReader.ReadInt32();
-            int num2 = num1 == 1 ? 288 : 272;
+            int num2 = (num1 == 1 ? 288 : 272);
             BlowfishKeys blowfishKeys = getBlowfishKeys(openReader.ReadBytes(256), compSize);
             byte[][] numArray1 = new byte[3][];
+            // Questionable allocation: unused alloc.
             // byte[] numArray2 = new byte[48];
-            byte[] decryptedHeaderData;
+            // byte[] decryptedHeaderData;
             if (num1 == 1 || num1 == 9)
             {
                 inFile.Seek(0L, SeekOrigin.Begin);
-                byte[] numArray3 = openReader.ReadBytes(288);
-                byte[] block = openReader.ReadBytes(48);
-                decryptedHeaderData = new BlewFish(blowfishKeys.groupHeadersKey).decryptBlock(block);
                 numArray1[0] = new byte[336];
-                Array.Copy(numArray3, numArray1[0], 288);
-                Array.Copy(decryptedHeaderData, 0, numArray1[0], 288, decryptedHeaderData.Length);
+
+                // Array.Copy(numArray3, numArray1[0], 288);
+                openReader.ReadRequiredBlock(new Span<byte>(numArray1[0], 0, 288)); // byte[] numArray3 = openReader.ReadBytes(288);
+
+                byte[] block = openReader.ReadBytes(48);
+                // decryptedHeaderData = new BlewFish(blowfishKeys.groupHeadersKey).decryptBlock(block);
+                // Array.Copy(decryptedHeaderData, 0, numArray1[0], 288, decryptedHeaderData.Length);
+                new BlewFish(blowfishKeys.groupHeadersKey).decryptBlockTo(block, new Span<byte>(numArray1[0], 288, numArray1[0].Length - 288));
             }
             else
             {
@@ -296,8 +302,10 @@ namespace Zamboni.IceFileFormats
             }
 
             //CRC32 for groups
-            Array.Copy(BitConverter.GetBytes(new Crc32Alt().GetCrc32(compressedContents1)), 0, headerData, 0x12C, 0x4);
-            Array.Copy(BitConverter.GetBytes(new Crc32Alt().GetCrc32(compressedContents2)), 0, headerData, 0x13C, 0x4);
+            // Array.Copy(BitConverter.GetBytes(new Crc32Alt().GetCrc32(compressedContents1)), 0, headerData, 0x12C, 0x4);
+            // Array.Copy(BitConverter.GetBytes(new Crc32Alt().GetCrc32(compressedContents2)), 0, headerData, 0x13C, 0x4);
+            BitConverter.TryWriteBytes(headerData.AsSpan(0x12C, 0x4), new Crc32Alt().GetCrc32(compressedContents1.Span));
+            BitConverter.TryWriteBytes(headerData.AsSpan(0x13C, 0x4), new Crc32Alt().GetCrc32(compressedContents2.Span));
 
             Array.Copy(headerData, outBytes, 0x150);
 
@@ -318,9 +326,20 @@ namespace Zamboni.IceFileFormats
         {
             public uint groupHeadersKey;
 
-            public uint[] groupOneBlowfish { get; } = new uint[2];
+            // public uint[] groupOneBlowfish { get; } = new uint[2]; // Declare like this is dangerous, unless intended to be.
+            // Because the "new uint[2]" will actually be a static instance and then be assigned to "groupOneBlowfish" as "default value".
+            // If used as-is, may result in using the same static array instance (many contexts use the same object/instance at the same time, causing incorrect values/states).
 
-            public uint[] groupTwoBlowfish { get; } = new uint[2];
+            // public uint[] groupTwoBlowfish { get; } = new uint[2];
+
+            public uint[] groupOneBlowfish { get; }
+            public uint[] groupTwoBlowfish { get; }
+
+            public BlowfishKeys()
+            {
+                this.groupOneBlowfish = new uint[2];
+                this.groupTwoBlowfish = new uint[2];
+            }
         }
     }
 }

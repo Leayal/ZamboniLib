@@ -1,4 +1,4 @@
-﻿// Decompiled with JetBrains decompiler
+// Decompiled with JetBrains decompiler
 // Type: psu_generic_parser.PrsCompressor
 // Assembly: zamboni, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
 // MVID: 73B487C9-8F41-4586-BEF5-F7D7BFBD4C55
@@ -9,24 +9,30 @@ using System.Collections.Generic;
 
 namespace Zamboni.Cryptography
 {
-    public class PrsCompressor
+    class PrsCompressor : CompressionBuffer
     {
-        private readonly Tuple<List<int>, int> emptyTuple = new Tuple<List<int>, int>(new List<int>(), 0);
-        private byte[] compBuffer;
-        private int ctrlBitCounter;
-        private int ctrlByteCounter;
-        private int outLoc;
+        private readonly static Tuple<List<int>, int> EmptyTuple = new Tuple<List<int>, int>(new List<int>(), 0);
+        // private byte[] compBuffer;
+        // private int ctrlBitCounter;
+        // private int ctrlByteCounter;
+        // private int outLoc;
 
-        public byte[] compress(byte[] toCompress)
+        private PrsCompressor(int length) : base(length) { }
+
+        public static Memory<byte> compress(Span<byte> toCompress)
         {
+            var buffer = new PrsCompressor(toCompress.Length);
             Dictionary<byte, Tuple<List<int>, int>> offsetDictionary = buildOffsetDictionary(toCompress);
-            ctrlByteCounter = 0;
+            buffer.ctrlByteCounter = 0;
             int length = toCompress.Length;
-            compBuffer = new byte[length];
-            outLoc = 3;
-            ctrlBitCounter = 2;
+            var compBuffer = buffer.compBuffer;
+            buffer.outLoc = 3;
+            buffer.ctrlBitCounter = 2;
             compBuffer[0] = 3;
-            Array.Copy(toCompress, 0, compBuffer, 1, 2);
+
+            // Array.Copy(toCompress, 0, compBuffer, 1, 2);
+            toCompress.Slice(0, 2).CopyTo(new Span<byte>(compBuffer, 1, 2));
+            
             int currentOffset = 2;
             while (currentOffset < length)
             {
@@ -56,37 +62,38 @@ namespace Zamboni.Cryptography
 
                 if (num1 == -1 || currentOffset - num1 > 256 && count < 3)
                 {
-                    writeRawByte(toCompress[currentOffset++]);
+                    buffer.writeRawByte(toCompress[currentOffset++]);
                 }
                 else
                 {
                     if (count < 6 && currentOffset - num1 < 256)
                     {
-                        writeShortReference(count, (byte)(num1 - (currentOffset - 256)));
+                        buffer.writeShortReference(count, (byte)(num1 - (currentOffset - 256)));
                     }
                     else
                     {
-                        writeLongReference(count, num1 - (currentOffset - 8192));
+                        buffer.writeLongReference(count, num1 - (currentOffset - 8192));
                     }
 
                     currentOffset += count;
                 }
             }
 
-            finalizeCompression();
-            Array.Resize(ref compBuffer, outLoc);
-            return compBuffer;
+            buffer.finalizeCompression();
+            // Array.Resize(ref compBuffer, outLoc);
+            return buffer.Memory;
         }
 
-        private Tuple<List<int>, int> getOffsetList(
+        private static Tuple<List<int>, int> getOffsetList(
             Dictionary<byte, Tuple<List<int>, int>> offsetDictionary,
             byte currentVal,
             int currentOffset)
         {
-            Tuple<List<int>, int> offset = offsetDictionary[currentVal];
-            if (offset == null)
+            // Tuple<List<int>, int> offset = offsetDictionary[currentVal];
+            if (!offsetDictionary.TryGetValue(currentVal, out var offset) || offset == null)
+            // if (offset == null)
             {
-                return emptyTuple;
+                return EmptyTuple;
             }
 
             if (offset.Item2 < currentOffset - 8176)
@@ -104,19 +111,20 @@ namespace Zamboni.Cryptography
             return offsetDictionary[currentVal];
         }
 
-        private Dictionary<byte, Tuple<List<int>, int>> buildOffsetDictionary(
-            byte[] toCompress)
+        private static Dictionary<byte, Tuple<List<int>, int>> buildOffsetDictionary(Span<byte> toCompress)
         {
-            Dictionary<byte, Tuple<List<int>, int>> dictionary = new Dictionary<byte, Tuple<List<int>, int>>();
+            Dictionary<byte, Tuple<List<int>, int>> dictionary = new Dictionary<byte, Tuple<List<int>, int>>(toCompress.Length);
             for (int index = 0; index < toCompress.Length; ++index)
             {
                 byte key = toCompress[index];
-                if (!dictionary.ContainsKey(key))
+                Tuple<List<int>, int>? item;
+                if (!dictionary.TryGetValue(key, out item))
                 {
-                    dictionary.Add(key, new Tuple<List<int>, int>(new List<int>(), 0));
+                    item = new Tuple<List<int>, int>(new List<int>(), 0);
+                    dictionary.Add(key, item);
                 }
 
-                dictionary[key].Item1.Add(index);
+                item.Item1.Add(index);
             }
 
             return dictionary;
@@ -155,7 +163,8 @@ namespace Zamboni.Cryptography
                 num |= (ushort)(count - 2);
             }
 
-            BitConverter.GetBytes(num).CopyTo(compBuffer, outLoc);
+            // BitConverter.GetBytes(num).CopyTo(compBuffer, outLoc);
+            BitConverter.TryWriteBytes(new Span<byte>(compBuffer, outLoc, compBuffer.Length - outLoc), num);
             outLoc += 2;
             if (count <= 9)
             {
@@ -177,17 +186,26 @@ namespace Zamboni.Cryptography
             ++ctrlBitCounter;
         }
 
-        private class CompressionBuffer
-        {
-            private byte[] buffer;
-            private int ctrlBitCounter;
-            private int ctrlByteCounter;
-            private int outLoc;
-        }
-
-        private interface CompressionChunk
+        private interface ICompressionChunk
         {
             void encode(CompressionBuffer buff);
+        }
+    }
+
+    class CompressionBuffer
+    {
+        public readonly byte[] compBuffer;
+        public int ctrlBitCounter;
+        public int ctrlByteCounter;
+        public int outLoc;
+
+        public Span<byte> Span => new Span<byte>(this.compBuffer, 0, outLoc);
+
+        public Memory<byte> Memory => new Memory<byte>(this.compBuffer, 0, outLoc);
+
+        public CompressionBuffer(int length)
+        {
+            this.compBuffer = new byte[length];
         }
     }
 }

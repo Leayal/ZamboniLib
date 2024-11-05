@@ -1,4 +1,6 @@
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Zamboni.Cryptography
 {
@@ -161,7 +163,9 @@ namespace Zamboni.Cryptography
         private void goRound(ref uint a, ref uint b, uint index)
         {
             b ^= P[index];
-            byte[] temp = BitConverter.GetBytes(b);
+            // byte[] temp = BitConverter.GetBytes(b);
+            Span<byte> temp = stackalloc byte[sizeof(uint)];
+            BitConverter.TryWriteBytes(temp, b);
             if (BigEndian)
             {
                 a ^= (S[temp[0]] + S[256 + temp[1]] ^ S[512 + temp[2]]) + S[768 + temp[3]];
@@ -172,7 +176,8 @@ namespace Zamboni.Cryptography
             }
         }
 
-        public uint[] encrypt(uint[] source)
+        /*
+        public uint[] encrypt(ReadOnlySpan<uint> source)
         {
             uint[] toReturn = { source[0], source[1] };
             uint left = source[0];
@@ -189,10 +194,25 @@ namespace Zamboni.Cryptography
             toReturn[1] = left;
             return toReturn;
         }
+        */
 
-        public uint[] encrypt(uint left, uint right)
+        /// <summary>Encrypts data and write to <paramref name="outputBuffer"/>.</summary>
+        /// <param name="left"></param>
+        /// <param name="right"></param>
+        /// <param name="outputBuffer"></param>
+        /// <exception cref="ArgumentException">When <seealso cref="Span{T}.Length"/> of <paramref name="outputBuffer"/> is smaller than 2.</exception>
+        public void encryptTo(uint left, uint right, Span<uint> outputBuffer)
+            => this.encryptTo(left, right, MemoryMarshal.Cast<uint, byte>(outputBuffer));
+
+        /// <summary>Encrypts data and write to <paramref name="outputBuffer"/>.</summary>
+        /// <param name="left"></param>
+        /// <param name="right"></param>
+        /// <param name="outputBuffer"></param>
+        /// <exception cref="ArgumentException">When <seealso cref="Span{T}.Length"/> of <paramref name="outputBuffer"/> is smaller than 8.</exception>
+        public void encryptTo(uint left, uint right, Span<byte> outputBuffer)
         {
-            uint[] toReturn = { left, right };
+            if (outputBuffer.Length < (sizeof(uint) * 2)) throw new ArgumentException(nameof(outputBuffer));
+
             for (uint i = 0; i < 16; i += 2)
             {
                 goRound(ref right, ref left, i);
@@ -201,11 +221,41 @@ namespace Zamboni.Cryptography
 
             left ^= P[16];
             right ^= P[17];
+
+
+            BitConverter.TryWriteBytes(outputBuffer, left);
+            BitConverter.TryWriteBytes(outputBuffer.Slice(sizeof(uint)), right);
+        }
+
+        public BlewFishBlock encrypt(uint left, uint right)
+        {
+            var block = new BlewFishBlock(left, right);
+            return this.encrypt(in block);
+        }
+
+        public BlewFishBlock encrypt(in BlewFishBlock block)
+        {
+            // uint[] toReturn = { left, right };
+            var (left, right) = block.ToTuple();
+            for (uint i = 0; i < 16; i += 2)
+            {
+                goRound(ref right, ref left, i);
+                goRound(ref left, ref right, i + 1);
+            }
+
+            left ^= P[16];
+            right ^= P[17];
+
+            /*
             toReturn[0] = right;
             toReturn[1] = left;
             return toReturn;
+            */
+
+            return new BlewFishBlock(left, right);
         }
 
+        /*
         public uint[] decrypt(uint[] source)
         {
             uint[] toReturn = { source[0], source[1] };
@@ -223,10 +273,25 @@ namespace Zamboni.Cryptography
             toReturn[1] = left;
             return toReturn;
         }
+        */
 
-        public uint[] decrypt(uint left, uint right)
+        /// <summary>Decrypts data and write to <paramref name="outputBuffer"/>.</summary>
+        /// <param name="left"></param>
+        /// <param name="right"></param>
+        /// <param name="outputBuffer"></param>
+        /// <exception cref="ArgumentException">When <seealso cref="Span{T}.Length"/> of <paramref name="outputBuffer"/> is smaller than 2.</exception>
+        public void decryptTo(uint left, uint right, Span<uint> outputBuffer)
+            => this.decryptTo(left, right, MemoryMarshal.Cast<uint, byte>(outputBuffer));
+
+        /// <summary>Decrypts data and write to <paramref name="outputBuffer"/>.</summary>
+        /// <param name="left"></param>
+        /// <param name="right"></param>
+        /// <param name="outputBuffer"></param>
+        /// <exception cref="ArgumentException">When <seealso cref="Span{T}.Length"/> of <paramref name="outputBuffer"/> is smaller than 2.</exception>
+        public void decryptTo(uint left, uint right, Span<byte> outputBuffer)
         {
-            uint[] toReturn = { left, right };
+            if (outputBuffer.Length < (sizeof(uint) * 2)) throw new ArgumentException(nameof(outputBuffer));
+
             for (uint i = 17; i > 1; i -= 2)
             {
                 goRound(ref right, ref left, i);
@@ -235,53 +300,99 @@ namespace Zamboni.Cryptography
 
             left ^= P[1];
             right ^= P[0];
+
+            BitConverter.TryWriteBytes(outputBuffer, left);
+            BitConverter.TryWriteBytes(outputBuffer.Slice(sizeof(uint)), right);
+        }
+
+        public BlewFishBlock decrypt(uint left, uint right)
+        {
+            // uint[] toReturn = { left, right };
+            for (uint i = 17; i > 1; i -= 2)
+            {
+                goRound(ref right, ref left, i);
+                goRound(ref left, ref right, i - 1);
+            }
+
+            left ^= P[1];
+            right ^= P[0];
+
+            /*
             toReturn[0] = right;
             toReturn[1] = left;
             return toReturn;
+            */
+
+            return new BlewFishBlock(left, right);
         }
 
-        public byte[] decryptBlock(byte[] block)
+        public void decryptBlockTo(ReadOnlySpan<byte> block, Span<byte> outputBuffer)
         {
-            byte[] toReturn = new byte[block.Length];
+            if (outputBuffer.Length < block.Length) throw new ArgumentException(nameof(outputBuffer));
+
             int size = block.Length;
             int i = 0;
             for (; i + 7 < size; i += 8)
             {
-                uint left = BitConverter.ToUInt32(block, i);
-                uint right = BitConverter.ToUInt32(block, i + 4);
-                uint[] temp = decrypt(left, right);
-                Array.Copy(BitConverter.GetBytes(temp[0]), 0, toReturn, i,
-                    4); //BitConverter.GetBytes(temp[0]).CopyTo(decryptedFiles, i);
-                Array.Copy(BitConverter.GetBytes(temp[1]), 0, toReturn, i + 4, 4);
+                uint left = BitConverter.ToUInt32(block.Slice(i));
+                uint right = BitConverter.ToUInt32(block.Slice(i + 4));
+                // uint[] temp = decrypt(left, right);
+                // Array.Copy(BitConverter.GetBytes(temp[0]), 0, toReturn, i, 4);
+                // BitConverter.GetBytes(temp[0]).CopyTo(decryptedFiles, i);
+                // Array.Copy(BitConverter.GetBytes(temp[1]), 0, toReturn, i + 4, 4);
+                this.decryptTo(left, right, outputBuffer.Slice(i, 8));
             }
 
             if (i < size)
             {
-                Array.Copy(block, i, toReturn, i, size - i);
+                // Array.Copy(block, i, toReturn, i, size - i);
+                block.Slice(i).CopyTo(outputBuffer.Slice(i));
             }
+        }
 
+        public Memory<byte> decryptBlock(ReadOnlySpan<byte> block)
+        {
+            Memory<byte> toReturn = new byte[block.Length];
+            this.decryptBlockTo(block, toReturn.Span);
             return toReturn;
         }
 
-        public byte[] encryptBlock(byte[] block)
+        /// <summary>Encrypts data from <paramref name="block"/> and write to <paramref name="outputBuffer"/>.</summary>
+        /// <param name="block"></param>
+        /// <param name="outputBuffer"></param>
+        /// <exception cref="ArgumentException">When <seealso cref="Span{T}.Length"/> of <paramref name="outputBuffer"/> is smaller than <seealso cref="Span{T}.Length"/> of <paramref name="block"/>.</exception>
+        public void encryptBlockTo(ReadOnlySpan<byte> block, Span<byte> outputBuffer)
         {
-            byte[] toReturn = new byte[block.Length];
+            if (outputBuffer.Length < block.Length) throw new ArgumentException(nameof(outputBuffer));
+
+            // Span<byte> toReturn = new byte[block.Length];
             int size = block.Length;
             int i = 0;
             for (; i + 7 < size; i += 8)
             {
-                uint left = BitConverter.ToUInt32(block, i);
-                uint right = BitConverter.ToUInt32(block, i + 4);
-                uint[] temp = encrypt(left, right);
-                Array.Copy(BitConverter.GetBytes(temp[0]), 0, toReturn, i,
-                    4); //BitConverter.GetBytes(temp[0]).CopyTo(decryptedFiles, i);
-                Array.Copy(BitConverter.GetBytes(temp[1]), 0, toReturn, i + 4, 4);
+                uint left = BitConverter.ToUInt32(block.Slice(i));
+                uint right = BitConverter.ToUInt32(block.Slice(i + 4));
+                // var temp = encrypt(left, right);
+                // Array.Copy(BitConverter.GetBytes(temp.left), 0, toReturn, i, 4);
+                // BitConverter.TryWriteBytes(outputBuffer.Slice(i, 4), temp.Left);
+                // BitConverter.GetBytes(temp[0]).CopyTo(decryptedFiles, i);
+                // Array.Copy(BitConverter.GetBytes(temp.right), 0, toReturn, i + 4, 4);
+                // BitConverter.TryWriteBytes(outputBuffer.Slice(i + 4, 4), temp.Right);
+                encryptTo(left, right, outputBuffer.Slice(i, 8));
             }
 
             if (i < size)
             {
-                Array.Copy(block, i, toReturn, i, size - i);
+                // Array.Copy(block, i, toReturn, i, size - i);
+                block.Slice(i).CopyTo(outputBuffer.Slice(i));
             }
+        }
+
+        public Span<byte> encryptBlock(ReadOnlySpan<byte> block)
+        {
+            Span<byte> toReturn = new byte[block.Length];
+
+            this.encryptBlockTo(block, toReturn);
 
             return toReturn;
         }
@@ -297,20 +408,20 @@ namespace Zamboni.Cryptography
                 P[i] = bf_pbox[i] ^ temp;
             }
 
-            uint[] data = { 0, 0 };
+            var data = new BlewFishBlock(0, 0);
 
             for (int i = 0; i < 18; i += 2)
             {
-                data = encrypt(data);
-                P[i] = data[0];
-                P[i + 1] = data[1];
+                data = encrypt(in data);
+                P[i] = data.Left;
+                P[i + 1] = data.Right;
             }
 
             for (int i = 0; i < 1024; i += 2)
             {
-                data = encrypt(data);
-                S[i] = data[0];
-                S[i + 1] = data[1];
+                data = encrypt(in data);
+                S[i] = data.Left;
+                S[i + 1] = data.Right;
             }
         }
     }

@@ -324,7 +324,7 @@ namespace Zamboni
             return numArray;
         }
 
-        protected byte[] packGroup(byte[] buffer, uint key1, uint key2, bool encrypt)
+        protected Span<byte> packGroup(ReadOnlySpan<byte> buffer, uint key1, uint key2, bool encrypt)
         {
             if (!encrypt)
             {

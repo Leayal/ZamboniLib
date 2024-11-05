@@ -64,6 +64,10 @@ namespace Zamboni.IceFormats
             return iceFile;
         }
 
+        /// <summary>When overriden, implement to parse ICE header from the stream</summary>
+        /// <param name="dataStream"></param>
+        protected abstract void ParseHeader(Stream dataStream);
+
         /// <summary>Gets File name from bytes</summary>
         /// <param name="fileToWrite"></param>
         /// <returns></returns>
@@ -224,26 +228,27 @@ namespace Zamboni.IceFormats
             return arr;
         }
 
-        protected byte[] decryptGroup(byte[] buffer, uint key1, uint key2, bool v3Decrypt)
+        protected Memory<byte> decryptGroup(byte[] buffer, uint key1, uint key2, bool v3Decrypt)
         {
-            byte[] block1 = new byte[buffer.Length];
+            Span<byte> block1;
+            // byte[] block1 = new byte[buffer.Length];
             if (v3Decrypt == false)
             {
-                block1 = FloatageFish.decrypt_block(buffer, (uint)buffer.Length, key1, decryptShift);
+                block1 = FloatageFish.decrypt_block(new Span<byte>(buffer), key1, decryptShift);
             }
             else
             {
-                Array.Copy(buffer, 0, block1, 0, buffer.Length);
+                block1 = new Span<byte>(buffer);
+                // Array.Copy(buffer, 0, block1, 0, buffer.Length);
             }
 
-            byte[] block2 = new BlewFish(ReverseBytes(key1)).decryptBlock(block1);
-            byte[] numArray = block2;
+            var block2 = new BlewFish(ReverseBytes(key1)).decryptBlock(block1);
             if (block2.Length <= SecondPassThreshold && v3Decrypt == false)
             {
-                numArray = new BlewFish(ReverseBytes(key2)).decryptBlock(block2);
+                return new BlewFish(ReverseBytes(key2)).decryptBlock(block2.Span);
             }
 
-            return numArray;
+            return block2;
         }
 
         public uint ReverseBytes(uint x)
@@ -285,9 +290,10 @@ namespace Zamboni.IceFormats
                 !ngsMode ? decompressGroup(inData, header.decompSize) : decompressGroupNgs(inData, header.decompSize);
         }
 
-        protected byte[] decompressGroup(byte[] inData, uint bufferLength)
+        protected Memory<byte> decompressGroup(Span<byte> inData, uint expectedOutputLength)
         {
-            byte[] xorred = new byte[inData.Length];
+            var len = inData.Length;
+            Span<byte> xorred = (len < 1024 ? stackalloc byte[inData.Length] : new byte[inData.Length]);
             // Array.Copy(inData, input, input.Length);
             const byte xorKey = 149;
             for (int index = 0; index < inData.Length; ++index)
@@ -296,18 +302,17 @@ namespace Zamboni.IceFormats
                 // byte xorVal = xorKey;
                 // xorred[index] = xorVal ^= inData[index];
             }
-            return PrsCompDecomp.Decompress(xorred, bufferLength);
+            return PrsCompDecomp.Decompress(xorred, expectedOutputLength);
         }
 
-        protected byte[] decompressGroupNgs(byte[] inData, uint bufferLength)
+        protected byte[]? decompressGroupNgs(byte[] inData, uint bufferLength)
         {
-            return Oodle.Decompress(inData, bufferLength);
+            return Oodle.Oodle.Decompress(inData, bufferLength);
         }
 
-        protected byte[] compressGroupNgs(byte[] buffer,
-            CompressorLevel compressorLevel = CompressorLevel.Fast)
+        protected Memory<byte> compressGroupNgs(byte[] buffer, CompressorLevel compressorLevel = CompressorLevel.Optimal1)
         {
-            return Oodle.OodleCompress(buffer, compressorLevel);
+            return Oodle.Oodle.OodleCompress(buffer, compressorLevel);
         }
 
         protected byte[] getCompressedContents(byte[] buffer, bool compress,

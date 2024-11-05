@@ -1,4 +1,4 @@
-﻿// Decompiled with JetBrains decompiler
+// Decompiled with JetBrains decompiler
 // Type: zamboni.PrsCompDecomp
 // Assembly: zamboni, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
 // MVID: 73B487C9-8F41-4586-BEF5-F7D7BFBD4C55
@@ -8,19 +8,19 @@ using System;
 
 namespace Zamboni.Cryptography
 {
-    public class PrsCompDecomp
+    public static class PrsCompDecomp
     {
-        private byte ctrlByte;
-        private int ctrlByteCounter;
-        private int currDecompPos;
-        private byte[] decompBuffer;
+        // private byte ctrlByte;
+        // private int ctrlByteCounter;
+        // private int currDecompPos;
+        // private byte[] decompBuffer;
 
-        private bool getCtrlBit()
+        private static bool getCtrlBit(Span<byte> buffer, ref int ctrlByteCounter, ref int currDecompPos, ref byte ctrlByte)
         {
             --ctrlByteCounter;
             if (ctrlByteCounter == 0)
             {
-                ctrlByte = decompBuffer[currDecompPos++];
+                ctrlByte = buffer[currDecompPos++];
                 ctrlByteCounter = 8;
             }
 
@@ -29,41 +29,35 @@ namespace Zamboni.Cryptography
             return flag;
         }
 
-        public static byte[] Decompress(byte[] input, uint outCount)
+        public static Memory<byte> Decompress(Span<byte> input, long expectedOutputLength)
         {
-            return new PrsCompDecomp().localDecompress(input, outCount);
-        }
-
-        public byte[] localDecompress(byte[] input, uint outCount)
-        {
-            byte[] outData = new byte[(int)outCount];
-            decompBuffer = input;
-            ctrlByte = 0;
-            ctrlByteCounter = 1;
-            currDecompPos = 0;
+            byte[] outData = new byte[expectedOutputLength];
+            // decompBuffer = input;
+            byte ctrlByte = 0;
+            int ctrlByteCounter = 1, currDecompPos = 0;
             int outIndex = 0;
             try
             {
-                while (outIndex < outCount && currDecompPos < input.Length)
+                while (outIndex < expectedOutputLength && currDecompPos < input.Length)
                 {
-                    while (getCtrlBit())
+                    while (getCtrlBit(input, ref ctrlByteCounter, ref currDecompPos, ref ctrlByte))
                     {
-                        outData[outIndex++] = decompBuffer[currDecompPos++];
+                        outData[outIndex++] = input[currDecompPos++];
                     }
 
                     int controlOffset;
                     int controlSize;
-                    if (getCtrlBit())
+                    if (getCtrlBit(input, ref ctrlByteCounter, ref currDecompPos, ref ctrlByte))
                     {
-                        if (currDecompPos < decompBuffer.Length)
+                        if (currDecompPos < input.Length)
                         {
-                            int data0 = decompBuffer[currDecompPos++];
-                            int data1 = decompBuffer[currDecompPos++];
+                            int data0 = input[currDecompPos++];
+                            int data1 = input[currDecompPos++];
                             if (data0 != 0 || data1 != 0)
                             {
                                 controlOffset = (data1 << 5) + (data0 >> 3) - 8192;
                                 int sizeTemp = data0 & 7;
-                                controlSize = sizeTemp != 0 ? sizeTemp + 2 : decompBuffer[currDecompPos++] + 10;
+                                controlSize = sizeTemp != 0 ? sizeTemp + 2 : input[currDecompPos++] + 10;
                             }
                             else
                             {
@@ -78,17 +72,17 @@ namespace Zamboni.Cryptography
                     else
                     {
                         controlSize = 2;
-                        if (getCtrlBit())
+                        if (getCtrlBit(input, ref ctrlByteCounter, ref currDecompPos, ref ctrlByte))
                         {
                             controlSize += 2;
                         }
 
-                        if (getCtrlBit())
+                        if (getCtrlBit(input, ref ctrlByteCounter, ref currDecompPos, ref ctrlByte))
                         {
                             ++controlSize;
                         }
 
-                        controlOffset = decompBuffer[currDecompPos++] - 256;
+                        controlOffset = input[currDecompPos++] - 256;
                     }
 
                     int loadIndex = controlOffset + outIndex;
@@ -103,12 +97,12 @@ namespace Zamboni.Cryptography
                 throw new ZamboniException(ex);
             }
 
-            return outData;
+            return new Memory<byte>(outData);
         }
 
-        public static byte[] compress(byte[] toCompress)
+        public static Memory<byte> Compress(Span<byte> toCompress)
         {
-            return new PrsCompressor().compress(toCompress);
+            return PrsCompressor.compress(toCompress);
         }
     }
 }
