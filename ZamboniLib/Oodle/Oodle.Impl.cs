@@ -19,7 +19,7 @@ namespace Zamboni.Oodle
         internal const string OOZ_Ex_X64 = "oo2core_8_win64_.dll";
 
         /// <summary>The default implementation of <seealso cref="Oodle"/> interface.</summary>
-        public static readonly OodleImpl DefaultImplementation = new OodleImpl(Environment.Is64BitProcess ? OOZ_X64 : OOZ_X86);
+        public static readonly OodleImpl DefaultImplementation = new OodleImpl(Environment.Is64BitProcess ? /* OOZ_X64 */ OOZ_Ex_X64  : OOZ_X86);
 
         private readonly SafeLibraryHandle libHandle;
 

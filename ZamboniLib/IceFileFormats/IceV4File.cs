@@ -54,22 +54,23 @@ namespace Zamboni.IceFileFormats
             int compSize = openReader.ReadInt32();
             int num2 = (num1 == 1 ? 288 : 272);
             BlowfishKeys blowfishKeys = getBlowfishKeys(openReader.ReadBytes(256), compSize);
-            byte[][] numArray1 = new byte[3][];
+            byte[]?[] numArray1 = new byte[3][];
             // Questionable allocation: unused alloc.
             // byte[] numArray2 = new byte[48];
-            // byte[] decryptedHeaderData;
+            byte[] decryptedHeaderData;
             if (num1 == 1 || num1 == 9)
             {
                 inFile.Seek(0L, SeekOrigin.Begin);
-                numArray1[0] = new byte[336];
+                var alloc_arr1 = new byte[336];
 
                 // Array.Copy(numArray3, numArray1[0], 288);
-                openReader.ReadRequiredBlock(new Span<byte>(numArray1[0], 0, 288)); // byte[] numArray3 = openReader.ReadBytes(288);
+                openReader.ReadRequiredBlock(new Span<byte>(alloc_arr1, 0, 288)); // byte[] numArray3 = openReader.ReadBytes(288);
 
                 byte[] block = openReader.ReadBytes(48);
-                // decryptedHeaderData = new BlewFish(blowfishKeys.groupHeadersKey).decryptBlock(block);
-                // Array.Copy(decryptedHeaderData, 0, numArray1[0], 288, decryptedHeaderData.Length);
-                new BlewFish(blowfishKeys.groupHeadersKey).decryptBlockTo(block, new Span<byte>(numArray1[0], 288, numArray1[0].Length - 288));
+                decryptedHeaderData = new BlewFish(blowfishKeys.groupHeadersKey).decryptBlock(block);
+                Array.Copy(decryptedHeaderData, 0, alloc_arr1, 288, decryptedHeaderData.Length);
+
+                numArray1[0] = alloc_arr1;
             }
             else
             {
@@ -287,17 +288,19 @@ namespace Zamboni.IceFileFormats
 
             if ((uint)compressedContents1.Length > 0U)
             {
-                byte[] numArray4 = packGroup(compressedContents1, blowfishKeys.groupOneBlowfish[0],
+                var numArray4 = packGroup(compressedContents1.Span, blowfishKeys.groupOneBlowfish[0],
                     blowfishKeys.groupOneBlowfish[1], useEncryption);
-                Array.Copy(numArray4, 0, outBytes, destinationIndex1, numArray4.Length);
+                // Array.Copy(numArray4, 0, outBytes, destinationIndex1, numArray4.Length);
+                numArray4.CopyTo(new Span<byte>(outBytes, destinationIndex1, numArray4.Length));
                 destinationIndex1 += numArray4.Length;
             }
 
             if ((uint)compressedContents2.Length > 0U)
             {
-                byte[] numArray4 = packGroup(compressedContents2, blowfishKeys.groupTwoBlowfish[0],
+                var numArray4 = packGroup(compressedContents2.Span, blowfishKeys.groupTwoBlowfish[0],
                     blowfishKeys.groupTwoBlowfish[1], useEncryption);
-                Array.Copy(numArray4, 0, outBytes, destinationIndex1, numArray4.Length);
+                // Array.Copy(null, 0, outBytes, destinationIndex1, numArray4.Length);
+                numArray4.CopyTo(new Span<byte>(outBytes, destinationIndex1, numArray4.Length));
                 int num = destinationIndex1 + numArray4.Length;
             }
 
@@ -315,7 +318,8 @@ namespace Zamboni.IceFileFormats
                 BlewFish blewFish = new BlewFish(blowfishKeys.groupHeadersKey);
                 byte[] block = new byte[0x30];
                 Array.Copy(headerData, 0x120, block, 0, 0x30);
-                Array.Copy(blewFish.encryptBlock(block), 0, outBytes, 0x120, 0x30);
+                // Array.Copy(blewFish.encryptBlock(block), 0, outBytes, 0x120, 0x30);
+                blewFish.encryptBlock(block).CopyTo(new Span<byte>(outBytes, 0x120, 0x30));
             }
 
             Array.Copy(BitConverter.GetBytes(compSize), 0, outBytes, 28, 4);

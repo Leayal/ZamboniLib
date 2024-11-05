@@ -29,7 +29,7 @@ namespace Zamboni.Cryptography
             return flag;
         }
 
-        public static Memory<byte> Decompress(Span<byte> input, long expectedOutputLength)
+        public static byte[] Decompress(Span<byte> input, long expectedOutputLength)
         {
             byte[] outData = new byte[expectedOutputLength];
             // decompBuffer = input;
@@ -97,7 +97,7 @@ namespace Zamboni.Cryptography
                 throw new ZamboniException(ex);
             }
 
-            return new Memory<byte>(outData);
+            return outData;
         }
 
         public static Memory<byte> Compress(Span<byte> toCompress)

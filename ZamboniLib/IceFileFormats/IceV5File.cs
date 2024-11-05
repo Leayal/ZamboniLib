@@ -7,6 +7,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Zamboni.Cryptography;
 
 namespace Zamboni.IceFileFormats
 {

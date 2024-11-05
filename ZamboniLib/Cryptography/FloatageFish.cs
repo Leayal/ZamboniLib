@@ -23,6 +23,9 @@ namespace Zamboni.Cryptography
             return decrypt_block(new ReadOnlySpan<byte>(data_block, 0, length), key, shift);
         }
 
+        public static byte[] decrypt_block(ReadOnlySpan<byte> data_block, uint key)
+                => decrypt_block(data_block, key, 16);
+
         public static byte[] decrypt_block(ReadOnlySpan<byte> data_block, uint key, int shift)
         {
             byte[] to_return = new byte[data_block.Length];

@@ -21,7 +21,7 @@ For various reasons, the code isn't particularly lovely here, but usable.</Descr
     <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
     <Deterministic>true</Deterministic>
     <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RepositoryType>git</RepositoryType>
     <PackageReleaseNotes>Clean up code by ReSharper and StyleCop.</PackageReleaseNotes>
@@ -38,18 +38,6 @@ For various reasons, the code isn't particularly lovely here, but usable.</Descr
   </ItemGroup>
   <ItemGroup>
     <Content Include="oo2core_8_win64_.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="ooz.x86.dll">
-      <Pack>true</Pack>
-      <PackageCopyToOutput>true</PackageCopyToOutput>
-      <PackagePath>lib/$(TargetFramework)</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="ooz.x64.dll">
-      <Pack>true</Pack>
-      <PackageCopyToOutput>true</PackageCopyToOutput>
-      <PackagePath>lib/$(TargetFramework)</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

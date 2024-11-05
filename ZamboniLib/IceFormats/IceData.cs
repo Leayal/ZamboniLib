@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using Zamboni.Cryptography;
@@ -245,7 +246,7 @@ namespace Zamboni.IceFormats
             var block2 = new BlewFish(ReverseBytes(key1)).decryptBlock(block1);
             if (block2.Length <= SecondPassThreshold && v3Decrypt == false)
             {
-                return new BlewFish(ReverseBytes(key2)).decryptBlock(block2.Span);
+                return new BlewFish(ReverseBytes(key2)).decryptBlock(block2);
             }
 
             return block2;
@@ -285,15 +286,28 @@ namespace Zamboni.IceFormats
             bool v3Decrypt = false)
         {
             byte[] buffer = openReader.ReadBytes((int)header.getStoredSize());
-            byte[] inData = !encrypt ? buffer : decryptGroup(buffer, groupOneTempKey, groupTwoTempKey, v3Decrypt);
-            return header.compSize <= 0U ? inData :
-                !ngsMode ? decompressGroup(inData, header.decompSize) : decompressGroupNgs(inData, header.decompSize);
+            var inData = !encrypt ? buffer : decryptGroup(buffer, groupOneTempKey, groupTwoTempKey, v3Decrypt);
+            if (header.compSize <= 0U)
+            {
+                if (MemoryMarshal.TryGetArray((ReadOnlyMemory<byte>)inData, out var segment) && segment.Array != null && segment.Count == segment.Array.Length)
+                {
+                    return segment.Array;
+                }
+                else
+                {
+                    return inData.ToArray();
+                }
+            }
+            else
+            {
+                return ngsMode ? decompressGroup(inData.Span, header.decompSize) : decompressGroupNgs(inData, header.decompSize);
+            }
         }
 
-        protected Memory<byte> decompressGroup(Span<byte> inData, uint expectedOutputLength)
+        protected byte[] decompressGroup(Span<byte> inData, uint expectedOutputLength)
         {
             var len = inData.Length;
-            Span<byte> xorred = (len < 1024 ? stackalloc byte[inData.Length] : new byte[inData.Length]);
+            byte[] xorred = new byte[inData.Length];
             // Array.Copy(inData, input, input.Length);
             const byte xorKey = 149;
             for (int index = 0; index < inData.Length; ++index)
@@ -305,7 +319,7 @@ namespace Zamboni.IceFormats
             return PrsCompDecomp.Decompress(xorred, expectedOutputLength);
         }
 
-        protected byte[]? decompressGroupNgs(byte[] inData, uint bufferLength)
+        protected byte[]? decompressGroupNgs(ReadOnlyMemory<byte> inData, uint bufferLength)
         {
             return Oodle.Oodle.Decompress(inData, bufferLength);
         }
@@ -315,7 +329,7 @@ namespace Zamboni.IceFormats
             return Oodle.Oodle.OodleCompress(buffer, compressorLevel);
         }
 
-        protected byte[] getCompressedContents(byte[] buffer, bool compress,
+        protected Memory<byte> getCompressedContents(byte[] buffer, bool compress,
             CompressorLevel compressorLevel = CompressorLevel.Fast)
         {
             if ((uint)buffer.Length <= 0U || compress == false)
@@ -329,30 +343,31 @@ namespace Zamboni.IceFormats
                 return buffer;
             }
 
-            byte[] numArray = PrsCompDecomp.compress(buffer);
+            var numArray = PrsCompDecomp.Compress(buffer);
+            var spanOfnumArray = numArray.Span;
             for (int index = 0; index < numArray.Length; ++index)
             {
-                numArray[index] ^= 149;
+                spanOfnumArray[index] ^= 149;
             }
 
             return numArray;
         }
 
-        protected byte[] packGroup(byte[] buffer, uint key1, uint key2, bool encrypt)
+        protected Span<byte> packGroup(Span<byte> buffer, uint key1, uint key2, bool encrypt)
         {
             if (!encrypt)
             {
                 return buffer;
             }
 
-            byte[] block = buffer;
+            var block = buffer;
             if (buffer.Length <= SecondPassThreshold)
             {
                 block = new BlewFish(ReverseBytes(key2)).encryptBlock(buffer);
             }
 
-            byte[] data_block = new BlewFish(ReverseBytes(key1)).encryptBlock(block);
-            return FloatageFish.decrypt_block(data_block, (uint)data_block.Length, key1);
+            var data_block = new BlewFish(ReverseBytes(key1)).encryptBlock(block);
+            return FloatageFish.decrypt_block(data_block, key1);
         }
 
         public record GroupHeader

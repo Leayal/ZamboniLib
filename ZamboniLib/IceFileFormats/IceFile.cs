@@ -225,18 +225,18 @@ namespace Zamboni
             byte[] block1 = new byte[buffer.Length];
             if (v3Decrypt == false)
             {
-                block1 = FloatageFish.decrypt_block(buffer, (uint)buffer.Length, key1, decryptShift);
+                block1 = FloatageFish.decrypt_block(buffer, buffer.Length, key1, decryptShift);
             }
             else
             {
                 Array.Copy(buffer, 0, block1, 0, buffer.Length);
             }
 
-            byte[] block2 = new BlewFish(ReverseBytes(key1)).decryptBlock(block1);
-            byte[] numArray = block2;
+            var block2 = new BlewFish(ReverseBytes(key1)).decryptBlock(block1);
+            var numArray = block2;
             if (block2.Length <= SecondPassThreshold && v3Decrypt == false)
             {
-                numArray = new BlewFish(ReverseBytes(key2)).decryptBlock(block2);
+                numArray = new BlewFish(ReverseBytes(key2)).decryptBlock(block2.AsSpan());
             }
 
             return numArray;
@@ -315,30 +315,31 @@ namespace Zamboni
                 return buffer;
             }
 
-            byte[] numArray = PrsCompDecomp.compress(buffer);
+            var numArray = PrsCompDecomp.Compress(buffer.AsSpan());
+            var spanOfnumArray = numArray.Span;
             for (int index = 0; index < numArray.Length; ++index)
             {
-                numArray[index] ^= 149;
+                spanOfnumArray[index] ^= 149;
             }
 
             return numArray;
         }
 
-        protected Span<byte> packGroup(ReadOnlySpan<byte> buffer, uint key1, uint key2, bool encrypt)
+        protected Span<byte> packGroup(Span<byte> buffer, uint key1, uint key2, bool encrypt)
         {
             if (!encrypt)
             {
                 return buffer;
             }
 
-            byte[] block = buffer;
+            var block = buffer;
             if (buffer.Length <= SecondPassThreshold)
             {
                 block = new BlewFish(ReverseBytes(key2)).encryptBlock(buffer);
             }
 
-            byte[] data_block = new BlewFish(ReverseBytes(key1)).encryptBlock(block);
-            return FloatageFish.decrypt_block(data_block, (uint)data_block.Length, key1);
+            var data_block = new BlewFish(ReverseBytes(key1)).encryptBlock(block);
+            return FloatageFish.decrypt_block(data_block, key1);
         }
 
         public class GroupHeader

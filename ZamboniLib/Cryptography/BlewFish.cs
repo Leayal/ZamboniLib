@@ -350,10 +350,10 @@ namespace Zamboni.Cryptography
             }
         }
 
-        public Memory<byte> decryptBlock(ReadOnlySpan<byte> block)
+        public byte[] decryptBlock(ReadOnlySpan<byte> block)
         {
-            Memory<byte> toReturn = new byte[block.Length];
-            this.decryptBlockTo(block, toReturn.Span);
+            var toReturn = new byte[block.Length];
+            this.decryptBlockTo(block, new Span<byte>(toReturn));
             return toReturn;
         }
 
